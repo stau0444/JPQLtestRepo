@@ -18,33 +18,27 @@ public class JpaMain {
         tx.begin();
 
         try {
-            Member member = new Member("user1" , 20);
-            em.persist(member);
+            //샘플 데이터
+            for (int i = 0 ; i <100; i++){
+                Member member = new Member("user"+i , i);
+                em.persist(member);
+            }
 
             em.flush();
             em.clear();
 
-            //스칼라 타입에서 값을 받는 방법
-            em.createQuery("select m.username,m.age from Member m ")
+
+            //페이징
+            List<Member> result = em.createQuery("select m from Member  m order by m.age desc", Member.class)
+                    .setFirstResult(0) // offset
+                    .setMaxResults(10) // limit
                     .getResultList();
 
-            //1. Object [] 타입으로 조회
-            List<Object[]> resultList = em.createQuery("select m.username,m.age from Member m ")
-                    .getResultList();
+            System.out.println("result.size() = " + result.size());
 
-            Object[] objects = resultList.get(0);
-            System.out.println("objects[0] = " + objects[0]);
-            System.out.println("objects[1] = " + objects[1]);
-            tx.commit();
+            result.forEach(System.out::println);
 
-            //2.new 명령어로 Dto 생성하여 조회
 
-            List<MemberDto> memberDto = em.createQuery("select new JPQL.domain.MemberDto( m.username,m.age) from Member m ", MemberDto.class)
-                    .getResultList();
-
-            MemberDto memberDto1 = memberDto.get(0);
-            System.out.println("memberDto1.getUsername() = " + memberDto1.getUsername());
-            System.out.println("memberDto1.getAge() = " + memberDto1.getAge());
 
         }catch (Exception e){
             tx.rollback();
