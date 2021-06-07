@@ -4,6 +4,7 @@ package JPQL;
 import JPQL.domain.Address;
 import JPQL.domain.Member;
 import JPQL.domain.MemberDto;
+import JPQL.domain.Team;
 
 import javax.persistence.*;
 import java.util.List;
@@ -18,25 +19,37 @@ public class JpaMain {
         tx.begin();
 
         try {
+            Team team =  new Team("team1");
+            em.persist(team);
+
             //샘플 데이터
-            for (int i = 0 ; i <100; i++){
-                Member member = new Member("user"+i , i);
-                em.persist(member);
-            }
+            Member member = new Member("user",10);
+            member.setTeam(team);
+            em.persist(member);
 
             em.flush();
             em.clear();
 
 
-            //페이징
-            List<Member> result = em.createQuery("select m from Member  m order by m.age desc", Member.class)
-                    .setFirstResult(0) // offset
-                    .setMaxResults(10) // limit
+            // inner join (inner 생략가능)
+            String query = "select m from Member m inner join m.team t";
+            List<Member> result = em.createQuery(query, Member.class)
                     .getResultList();
 
-            System.out.println("result.size() = " + result.size());
+            // left outer join (outer 생략가능)
+            String query2 = "select m from Member m left outer join m.team t";
+            List<Member> result2 = em.createQuery(query2, Member.class)
+                    .getResultList();
 
-            result.forEach(System.out::println);
+            // on 절로 join의 조건 추가
+            String query3 = "select m from Member m inner join m.team t on  t.name = 'team1'";
+            List<Member> result3 = em.createQuery(query3, Member.class)
+                    .getResultList();
+
+            //연관관계가 없는 엔티티 외부 조인
+            String query4 = "select m from Member m left join Team t on m.username = t.name ";
+            List<Member> result4 = em.createQuery(query4, Member.class)
+                    .getResultList();
 
 
 
