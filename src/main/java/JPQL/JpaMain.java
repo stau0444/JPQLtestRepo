@@ -43,33 +43,74 @@ public class JpaMain {
             em.clear();
 
 
-            // 상태 필드 표현
-            // 더 이상 객체 탐색이 불가능하다
-            String query = "select m.username from Member m";
+
+            // 만약 연관관계에 있는 Team이 모두 다르다면 쿼리가 n+1번으로 나간다.
+            String query = "select m from Member m ";
             List<Member> result = em.createQuery(query, Member.class)
                     .getResultList();
+            for (Member member : result) {
+                System.out.println("member=" +member.getUsername() +" , "+"team="+member.getTeam().getName());
+                //회원1 , 팀 1(sql)
+                //회원2 , 팀 2(1차 캐시)
+                //회원3 , 팀 3(sql)
+            }
 
-
-            //단일값 연관 필드
-            //team 은 엔티티 이기 떄문에 팀에서 한번더 탐색이 가능하다 .
-            //m.team 에서 묵시적 내부조인이 일어나고 name을 찾을때는 상태필드기 때문에 탐색이 끝난다.
-            //JPQL 에서는 Join 문을 적지 않아도 연관관계에 의해 묵시적으로 조인이 일어나고 SQL에는 join문이 나가기 떄문에
-            // JPQL에서도 SQL 과 마찬가지로 Join문을 명시적으로 써주는 것이 좋다 .
-            String query1 = "select m.team.name from Member m";
-            List<Member> result1 = em.createQuery(query1, Member.class)
+            // 만약 연관관계에 있는 Team이 모두 다르다면 쿼리가 n+1번으로 나간다.
+            // sql 작성에서 Eagar의 기능을 하는거와 같다 . join으로 한번에 진짜 데이터를 가져온다 .
+            String query2 = "select m from Member m join fetch m.team";
+            List<Member> result2 = em.createQuery(query2, Member.class)
                     .getResultList();
+            for (Member member : result2) {
+                System.out.println("member=" +member.getUsername() +" , "+"team="+member.getTeam().getName());
+            }
 
-            //컬랙션값 연관경로
-            //컬렉션값 연관경로는 컬렉션에 몇번째 값을 원하는지에 대해 알수 없음으로 탐색을할 수 없다
-            String query2 = "select t.members from Team t";
-            Collection result2 = em.createQuery(query2, Collection.class)
+            //반대편 일다다에서 컬랙션조회를 할떄
+            //컬렉션 페치조인의 주의점
+            //일대다 관계에서의 DB 레코드가 뻥튀기 된다 .
+            // team2 에 2명이 있으니 결과도 2개가 나온다 . team2에 관한 내용도 멤버의 수만큼 나온다.
+           String query3 = "select t from Team t join fetch t.members";
+            List<Team> result3 = em.createQuery(query3, Team.class)
                     .getResultList();
+            for (Team team : result3) {
+                System.out.println("teamname=" +team.getName() +" , "+"member="+team.getMembers().size());
+            }
 
-            //컬랙션값 연관경로 해결 (명시적 조인 사용)
-            //명시적 조인을 하면 별칭을 얻을 수 있기 떄문에 탐색이 가능하다 .
-            String query3 = "select t.members,m.username from Team t join t.members m ";
-            Collection result3 = em.createQuery(query3, Collection.class)
+            //위의 문제해결을 위해  JPQL이 distict 명령어를 제공한다 .
+            //db의 distinct와는 조금 다르다 .
+            //JPQL의 distinct는 sql에 distinct를 추가해서 날려주고
+            //결과로 돌아온 값이 중복되는 엔티티를 한번더 체크해서 날려준다 .
+
+            String query4 = "select distinct t from Team t join fetch t.members";
+            List<Team> result4 = em.createQuery(query4, Team.class)
                     .getResultList();
+            for (Team team : result4) {
+                System.out.println("teamname=" +team.getName() +" , "+"member="+team.getMembers().size());
+            }
+
+            em.flush();
+            em.clear();
+
+            //일반 조인과 페치조인의 차이
+
+            System.out.println("==============일반조인=============");
+            //일반조인
+            String query5 = "select  t from Team t join t.members";
+            List<Team> result5 = em.createQuery(query5, Team.class)
+                    .getResultList();
+            for (Team team : result5) {
+                System.out.println("teamname=" +team.getName() +" , "+"member="+team.getMembers().size());
+            }
+
+            System.out.println("==============페치조인=============");
+            //페치조인
+            String query6 = "select  t from Team t join fetch t.members";
+            List<Team> result6 = em.createQuery(query6, Team.class)
+                    .getResultList();
+            for (Team team : result5) {
+                System.out.println("teamname=" +team.getName() +" , "+"member="+team.getMembers().size());
+            }
+
+
 
 
 
