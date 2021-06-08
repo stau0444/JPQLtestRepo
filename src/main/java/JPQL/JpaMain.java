@@ -5,6 +5,7 @@ import JPQL.domain.Address;
 import JPQL.domain.Member;
 import JPQL.domain.MemberDto;
 import JPQL.domain.Team;
+import jdk.swing.interop.SwingInterOpUtils;
 
 import javax.persistence.*;
 import java.util.Collection;
@@ -34,86 +35,97 @@ public class JpaMain {
             member2.setTeam(team2);
             Member member3 = new Member("user3",10);
             member3.setTeam(team2);
+            Member member4 = new Member("user4",10);
+            member4.setTeam(team2);
 
             em.persist(member1);
             em.persist(member2);
             em.persist(member3);
+            em.persist(member4);
 
             em.flush();
             em.clear();
 
 
 
-            // 만약 연관관계에 있는 Team이 모두 다르다면 쿼리가 n+1번으로 나간다.
-            String query = "select m from Member m ";
-            List<Member> result = em.createQuery(query, Member.class)
+            //페치조인의 한계
+            //1.기본적으로 연결된 것을 모두 끌어오는 것이기 떄문에
+            //페치조인 되는 대상에는 별칭을 주지 않는 것이 관례이다.
+            //t.members 에서 필터링을 해서 원하는 만큼만 가져오고싶다면?
+            //아예 팀이아닌 멤버에서 조회를 해야한다.
+
+            //2. 둘이상의 컬렉션은 패치 조인 할 수 없다.
+            //일대다 관계만해도 데이터가 뻥튀기 되는데 , 컬렉션을 한번더 가져오면 일대다대다 관계가 되고
+            // 뻥튀기에 뻥튀기가 됨
+
+            //3.컬렉션을 페치 조인하면 페이징 API를 사용할 수 없다.
+            // 일대다 관계에서 데이터가 뻥튀기 되는데 페이징을 해버리면
+            // 데이터가 짤려버릴 수 있다.
+            //컬렉션 패치 조인에서 페이징 api를 사용하면 in-memory로 동작하기 떄문에 매우 위험하다
+            //3
+
+
+//            String query = "select  t from Team t join fetch t.members as tm";
+//            List<Team> result = em.createQuery(query, Team.class)
+//                    .setFirstResult(0)
+//                    .setMaxResults(2)
+//                    .getResultList();
+//            for (Team team : result) {
+//                System.out.println("teamname=" +team.getName() +" , "+"member="+team.getMembers().size());
+//            }
+
+            System.out.println("________________페치조인페이징_________________");
+            //페치조인 페이징 해결 방안 2가지
+
+            //1. 반대로 접근한다 .
+            //멤버로 조회하여 멤버의 팀을가져온다
+            //다대일로 연관관계가 바뀌기 때문에 페이징이 가능해진다.
+            String query1 = "select  m from Member m  join fetch m.team";
+            List<Member> result1 = em.createQuery(query1, Member.class)
+                    .setFirstResult(0)
+                    .setMaxResults(4)
                     .getResultList();
-            for (Member member : result) {
-                System.out.println("member=" +member.getUsername() +" , "+"team="+member.getTeam().getName());
-                //회원1 , 팀 1(sql)
-                //회원2 , 팀 2(1차 캐시)
-                //회원3 , 팀 3(sql)
+            for (Member member : result1) {
+                System.out.println("team->"+member.getTeam().getName()+", member->"+member.getUsername());
             }
 
-            // 만약 연관관계에 있는 Team이 모두 다르다면 쿼리가 n+1번으로 나간다.
-            // sql 작성에서 Eagar의 기능을 하는거와 같다 . join으로 한번에 진짜 데이터를 가져온다 .
-            String query2 = "select m from Member m join fetch m.team";
-            List<Member> result2 = em.createQuery(query2, Member.class)
-                    .getResultList();
-            for (Member member : result2) {
-                System.out.println("member=" +member.getUsername() +" , "+"team="+member.getTeam().getName());
-            }
+            System.out.println("------------------Test----------------");
 
-            //반대편 일다다에서 컬랙션조회를 할떄
-            //컬렉션 페치조인의 주의점
-            //일대다 관계에서의 DB 레코드가 뻥튀기 된다 .
-            // team2 에 2명이 있으니 결과도 2개가 나온다 . team2에 관한 내용도 멤버의 수만큼 나온다.
-           String query3 = "select t from Team t join fetch t.members";
+
+
+            String query3 = "select  t from Team t";
             List<Team> result3 = em.createQuery(query3, Team.class)
                     .getResultList();
+            System.out.println("result3.size() = " + result3.size());
+
             for (Team team : result3) {
-                System.out.println("teamname=" +team.getName() +" , "+"member="+team.getMembers().size());
+                System.out.println("team="+team.getName()+",members="+team.getMembers().size());
+                for (Member member : team.getMembers()){
+                    System.out.println("->member=" + member);
+                }
             }
+            //정리
 
-            //위의 문제해결을 위해  JPQL이 distict 명령어를 제공한다 .
-            //db의 distinct와는 조금 다르다 .
-            //JPQL의 distinct는 sql에 distinct를 추가해서 날려주고
-            //결과로 돌아온 값이 중복되는 엔티티를 한번더 체크해서 날려준다 .
+            //1대다 관계에서 다쪽은 1의 고유키를 공유하고 있다 .
+            //예를들면 팀 1 -> 회원 1, 회원2
+            //회원 1과 회원2 의 외래키는 팀1의 고유키일 것이다.
 
-            String query4 = "select distinct t from Team t join fetch t.members";
-            List<Team> result4 = em.createQuery(query4, Team.class)
-                    .getResultList();
-            for (Team team : result4) {
-                System.out.println("teamname=" +team.getName() +" , "+"member="+team.getMembers().size());
-            }
-
-            em.flush();
-            em.clear();
-
-            //일반 조인과 페치조인의 차이
-
-            System.out.println("==============일반조인=============");
-            //일반조인
-            String query5 = "select  t from Team t join t.members";
-            List<Team> result5 = em.createQuery(query5, Team.class)
-                    .getResultList();
-            for (Team team : result5) {
-                System.out.println("teamname=" +team.getName() +" , "+"member="+team.getMembers().size());
-            }
-
-            System.out.println("==============페치조인=============");
-            //페치조인
-            String query6 = "select  t from Team t join fetch t.members";
-            List<Team> result6 = em.createQuery(query6, Team.class)
-                    .getResultList();
-            for (Team team : result5) {
-                System.out.println("teamname=" +team.getName() +" , "+"member="+team.getMembers().size());
-            }
+            //이때문에 1대다 관계의 조회시 데이터의 뻥튀기가 일어난다 .
+            //팀1에서 멤버를 연관된 멤버를 조회한다고 생각해보자
+            //select * from team t join member m on m.team_id = t.id;
+            //join 조건을보면 m.team_id = t.id 외래키인 팀아이디를 비교한다.
+            //t.id 를 team_id로 갖고있는 회원은 현재 회원1 , 회원2기 떄문에
+            //1 쪽인 팀의 입장에서 다 쪽인 회원을 연관관계로 찾아낼경우
+            //join 조건을 통해  조회되는 레코드가 2개가 될 것이다 (회원 1 , 회원2가 팀1의 아이디를 갖고 있음 )
+            //그렇다면 JPA 입장에서는 ? 팀이 두개가 되어버리고 두개는 같은 팀의 주소 값을 가르킨다.
+            //
 
 
 
 
 
+
+            tx.commit();
 
         }catch (Exception e){
             tx.rollback();
